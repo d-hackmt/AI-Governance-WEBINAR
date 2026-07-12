@@ -1,0 +1,35 @@
+# Sentience Governor operator profile for the Northfield loan-approval demo.
+# Schema reference: govenenv/Lib/site-packages/sentience_governor/profile/schema.py
+schema_version: 1
+
+session_intent:
+  required: true
+  # first_write: POL-001 fires only on the first mutating (WRITE/DELETE/EXECUTE)
+  # event of the session, instead of on every event without intent — lets the
+  # Auditor Agent's single end-of-run audit-log write demonstrate the rule
+  # clearly instead of it firing constantly during the read-heavy analysis phase.
+  demand_at: first_write
+  prompt_template: null
+
+task_boundary:
+  # Only read_to_write_transition is meaningful with this demo's flat,
+  # dot-free tool-name scheme: dir_change compares path-like prefixes, and
+  # with no shared prefixes between tool names every call would look like a
+  # directory change (noisy, not a real signal). read_to_write_transition
+  # fires exactly once, at the genuinely meaningful moment: after a run of
+  # reads (Analyst + Decision analyzing the application), the Auditor's
+  # single audit-log write.
+  signals:
+    - read_to_write_transition
+  time_gap_seconds: 300
+  dir_change_depth: 2
+  on_match: flag
+
+high_consequence:
+  # Composite matched is "tool_id:target_system" (see src/data_access.py).
+  # Confidential/PII and restricted data always surface prominently,
+  # regardless of what else fires.
+  tools:
+    - "loan_applicants"
+    - "employee_salaries_confidential"
+  on_match: flag

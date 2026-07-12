@@ -1,0 +1,41 @@
+# Secrets — never commit real API keys
+.env
+.env.*
+!.env.example
+
+# Virtual environment (uv already drops its own .gitignore inside this,
+# but keeping it here too in case the venv is ever recreated without uv)
+govenenv/
+.venv/
+venv/
+
+# Python bytecode / caches
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter (ipykernel is a project dependency)
+.ipynb_checkpoints/
+
+# Streamlit local config/secrets (if ever created)
+.streamlit/secrets.toml
+
+# Generated demo data — regenerate any time with:
+#   python scripts/generate_dummy_data.py
+# Ignored so a session's audit-log writes never show up as noisy diffs.
+data/*.xlsx
+data/*.csv
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Playwright browser cache (only ever used for manual testing, never a
+# project dependency — see requirements.txt)
+.playwright/
