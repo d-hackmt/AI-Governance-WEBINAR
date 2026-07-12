@@ -27,7 +27,8 @@ __pycache__/
 # Generated demo data — regenerate any time with:
 #   python scripts/generate_dummy_data.py
 # Ignored so a session's audit-log writes never show up as noisy diffs.
-
+# data/*.xlsx
+# data/*.csv
 
 # OS / editor junk
 .DS_Store
