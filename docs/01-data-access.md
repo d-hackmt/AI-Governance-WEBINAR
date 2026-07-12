@@ -8,6 +8,10 @@ This file answers one question for every piece of company data: *how sensitive i
 
 Made up by [`scripts/generate_dummy_data.py`](../scripts/generate_dummy_data.py) — never hand-edit anything in `data/`, just rerun that script to reset.
 
+`data/*.xlsx` and `data/*.csv` are gitignored (they're generated, and one of them gets written to during a run — tracking them in git would mean noisy diffs after every demo). That means a fresh clone of this repo has the *rules* about these files but not the files themselves. The app handles that itself — on load it checks `data_access.missing_data_files()`, and if anything's missing it shows an upload section instead of the applicant picker, with one clearly-named field per required file (see [The web app](06-app-ui.md#uploading-company-data)) plus a one-click "use bundled sample data" button that just calls `generate_dummy_data.main()` directly.
+
+If you upload your own `company_financials_public.xlsx` instead of using the bundled one, `_normalize_financials_workbook()` auto-adds the `decision_log` sheet if it's missing (your own file almost certainly won't have Northfield's internal bookkeeping sheet) and renames a lone sheet to `quarterly_summary` if that exact name isn't present.
+
 ```mermaid
 graph TD
     P["company_financials_public.xlsx<br/>tier: public"] -->|read + write| OK1["Anyone may read it.<br/>Only the audit-log write is special."]

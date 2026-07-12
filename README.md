@@ -118,7 +118,9 @@ source govenenv/Scripts/activate
 streamlit run app.py
 ```
 
-Then: paste your keys in the sidebar (press **Enter** after each, not Tab), pick a model per agent, pick an applicant, and click Run. To wipe the demo data back to a clean slate any time: `python scripts/generate_dummy_data.py`.
+On a fresh clone, `data/` is empty (`data/*.xlsx` and `data/*.csv` are gitignored) — the app notices and shows a setup section first: click **"Use bundled sample data"** for the one-click fictional dataset, or upload your own 4 files (each upload field is labeled with the exact filename it expects). Either way, that section then collapses and the rest of the app appears.
+
+From there: paste your keys in the sidebar (press **Enter** after each, not Tab), pick a model per agent, pick an applicant, and click Run. To wipe the demo data back to a clean slate any time, either click that same button again in the app, or run `python scripts/generate_dummy_data.py` from the terminal.
 
 ## Where things live
 

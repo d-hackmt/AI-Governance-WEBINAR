@@ -62,6 +62,142 @@ DATA_REGISTRY: dict[str, dict] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Upload support — data/*.xlsx and data/*.csv are gitignored (see ../.gitignore)
+# so a fresh clone of this repo has the *registry* above but no actual files.
+# This section lets the Streamlit app either generate the bundled fictional
+# dataset or accept a user's own uploads, one field per required file, named
+# so it's unambiguous which upload goes where.
+# ---------------------------------------------------------------------------
+
+REQUIRED_DATA_FILES: list[dict] = [
+    {
+        "filename": "company_financials_public.xlsx",
+        "tier": "public",
+        "extensions": ["xlsx"],
+        "hint": (
+            "Needs a 'quarterly_summary' sheet. If your file has only one "
+            "sheet, it's renamed to that automatically. A 'decision_log' "
+            "sheet is added automatically if missing — that's where the "
+            "Auditor appends each run's outcome."
+        ),
+    },
+    {
+        "filename": "internal_credit_policy.csv",
+        "tier": "internal",
+        "extensions": ["csv"],
+        "hint": "Columns: rule_id, description, threshold",
+    },
+    {
+        "filename": "loan_applicants.xlsx",
+        "tier": "pii",
+        "extensions": ["xlsx"],
+        "hint": (
+            "Columns: application_id, applicant_name, monthly_income_usd, "
+            "existing_debt_usd, credit_score, loan_amount_requested_usd, "
+            "purpose, notes. 'application_id' is required — it's what the "
+            "applicant picker and the Decision agent's lookups key off."
+        ),
+    },
+    {
+        "filename": "employee_salaries_confidential.xlsx",
+        "tier": "restricted",
+        "extensions": ["xlsx"],
+        "hint": (
+            "Never read by any agent under any circumstance — upload "
+            "anything here (e.g. employee_id, name, department, salary_usd) "
+            "just so the restricted-access demonstration has a real file to "
+            "point at."
+        ),
+    },
+]
+
+
+def missing_data_files() -> list[str]:
+    """Filenames from REQUIRED_DATA_FILES that don't exist in data/ yet."""
+    return [
+        spec["filename"]
+        for spec in REQUIRED_DATA_FILES
+        if not (DATA_DIR / spec["filename"]).is_file()
+    ]
+
+
+def all_data_files_present() -> bool:
+    return not missing_data_files()
+
+
+def _normalize_financials_workbook(path: Path) -> str | None:
+    """Ensure the uploaded workbook has 'quarterly_summary' + 'decision_log'.
+
+    A user's own file almost certainly won't have a 'decision_log' sheet —
+    that's this app's own bookkeeping, not something anyone would author by
+    hand. If there's no 'quarterly_summary' sheet either, but exactly one
+    other sheet, that sheet is assumed to be it and renamed. Ambiguous cases
+    (multiple un-named sheets) are left alone and reported back as a warning
+    string rather than guessed at.
+    """
+    sheets = pd.read_excel(path, sheet_name=None)
+    warning = None
+
+    if "quarterly_summary" not in sheets:
+        candidates = [name for name in sheets if name != "decision_log"]
+        if len(candidates) == 1:
+            sheets["quarterly_summary"] = sheets.pop(candidates[0])
+        else:
+            warning = (
+                "No 'quarterly_summary' sheet found, and there's more than one "
+                "other sheet to guess from. Rename your main sheet to "
+                "'quarterly_summary' and re-upload — until then, the Analyst "
+                "won't find the data it expects."
+            )
+
+    if "decision_log" not in sheets:
+        sheets["decision_log"] = pd.DataFrame(
+            columns=["timestamp_utc", "application_id", "decision", "agent_id", "session_id"]
+        )
+
+    with pd.ExcelWriter(path, engine="openpyxl", mode="w") as writer:
+        for name, df in sheets.items():
+            df.to_excel(writer, sheet_name=name, index=False)
+
+    return warning
+
+
+def _validate_uploaded_file(filename: str) -> str | None:
+    path = DATA_DIR / filename
+    try:
+        if filename == "loan_applicants.xlsx":
+            df = pd.read_excel(path)
+            if "application_id" not in df.columns:
+                return "No 'application_id' column found — the applicant picker needs one."
+        elif filename == "internal_credit_policy.csv":
+            df = pd.read_csv(path)
+            if df.empty:
+                return "This file loaded but has no rows."
+    except Exception as exc:  # noqa: BLE001 — surfaced to the UI, not swallowed
+        return f"Could not read this file: {exc}"
+    return None
+
+
+def save_uploaded_file(filename: str, file_bytes: bytes) -> str | None:
+    """Write an uploaded file to data/<filename> and lightly validate it.
+
+    Returns a warning string if something looks off (still saved either
+    way — the warning is informational, not a hard rejection), or None if
+    everything checks out.
+    """
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    path = DATA_DIR / filename
+    path.write_bytes(file_bytes)
+
+    if filename == "company_financials_public.xlsx":
+        warning = _normalize_financials_workbook(path)
+        if warning:
+            return warning
+
+    return _validate_uploaded_file(filename)
+
+
 class AccessDenied(PermissionError):
     """Raised when a tool tries to touch a 'deny' tier file.
 

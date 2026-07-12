@@ -20,8 +20,10 @@ from pathlib import Path
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
 
 import data_access  # noqa: E402
+import generate_dummy_data  # noqa: E402
 from graph import build_graph  # noqa: E402
 from governance_wiring import GovernanceSession  # noqa: E402
 from langgraph.types import Command  # noqa: E402
@@ -113,6 +115,58 @@ def _cached_applicant_ids() -> list[str]:
 def _cached_applicant_preview(application_id: str) -> dict:
     return data_access.preview_applicant(application_id)
 
+
+# ---------------------------------------------------------------------------
+# Company data files — data/*.xlsx and data/*.csv are gitignored, so a fresh
+# clone of this repo has nowhere to read from yet. Offer both paths: generate
+# the bundled fictional dataset, or upload your own, one clearly-named field
+# per required file so it's unambiguous which upload goes where.
+# ---------------------------------------------------------------------------
+
+missing_files = data_access.missing_data_files()
+data_section_label = (
+    "📁 Company data files — none found, set these up first"
+    if missing_files
+    else "📁 Company data files (loaded — expand to replace any of them)"
+)
+
+with st.expander(data_section_label, expanded=bool(missing_files)):
+    if missing_files:
+        st.warning(
+            f"Missing: {', '.join(missing_files)}. Generate the bundled sample "
+            "dataset below, or upload your own files."
+        )
+
+    if st.button("🧪 Use bundled sample data (resets all 4 files)"):
+        generate_dummy_data.main()
+        _cached_applicant_ids.clear()
+        _cached_applicant_preview.clear()
+        st.rerun()
+
+    st.divider()
+    st.caption("Or upload your own — each field expects exactly this filename's data:")
+
+    uploaded_by_filename: dict[str, object] = {}
+    for spec in data_access.REQUIRED_DATA_FILES:
+        have_it = spec["filename"] not in missing_files
+        label = f"{spec['filename']}  ·  tier: {spec['tier']}" + ("  ✅ present" if have_it else "")
+        uploaded = st.file_uploader(label, type=spec["extensions"], help=spec["hint"], key=f"upload_{spec['filename']}")
+        if uploaded is not None:
+            uploaded_by_filename[spec["filename"]] = uploaded
+
+    if uploaded_by_filename and st.button("💾 Save uploaded file(s)"):
+        for filename, uploaded_file in uploaded_by_filename.items():
+            warning = data_access.save_uploaded_file(filename, uploaded_file.getvalue())
+            if warning:
+                st.warning(f"{filename}: {warning}")
+            else:
+                st.success(f"{filename}: saved.")
+        _cached_applicant_ids.clear()
+        _cached_applicant_preview.clear()
+        st.rerun()
+
+if missing_files:
+    st.stop()
 
 applicant_ids = _cached_applicant_ids()
 application_id = st.selectbox("Choose an application to review", applicant_ids)

@@ -18,6 +18,24 @@ graph TD
 
 Three password-type text fields (Groq, Mistral, Jina), plus a provider + model dropdown pair for each of the three agent roles. **Press Enter after typing a key, not Tab** — Streamlit's text input only commits its value to the page's state on Enter or on losing focus in a way Tab doesn't reliably trigger; this tripped up automated testing of this exact page.
 
+## Uploading company data
+
+`data/*.xlsx` and `data/*.csv` are gitignored (see [Data & access tiers](01-data-access.md)), so a fresh clone has no actual data files yet. Right below the title, the app checks `data_access.missing_data_files()` and — if anything's missing — opens an expander (auto-expanded) with two ways to fix it:
+
+```mermaid
+graph TD
+    Check{"Any of the 4 required<br/>files missing?"}
+    Check -->|yes| Show["Show the expander, auto-expanded.<br/>Rest of the page is st.stop()'d."]
+    Check -->|no| Collapsed["Show it collapsed —<br/>'loaded, expand to replace any of them'"]
+    Show --> Gen["Button: use bundled sample data<br/>(calls generate_dummy_data.main() directly)"]
+    Show --> Up["4 named st.file_uploader fields,<br/>one per required filename"]
+    Up --> Save["Save uploaded file(s) button<br/>→ data_access.save_uploaded_file() per file"]
+```
+
+Each uploader's label is the *exact* filename expected (e.g. `loan_applicants.xlsx  ·  tier: pii`) plus a hover tooltip listing the columns that file needs — so there's no guessing which upload field a given file goes in. If everything required is already present, the whole section collapses to a one-line "loaded" summary but stays available in case you want to swap a file out later in the session.
+
+While any file is missing, the app calls `st.stop()` right after this section — the applicant picker and everything below it simply isn't rendered, rather than rendering broken.
+
 ## Caching — what's cached and why
 
 Streamlit reruns this entire script top-to-bottom on almost every click. Three things are cached so that doesn't mean redoing real work every time:
