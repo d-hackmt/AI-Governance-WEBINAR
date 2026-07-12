@@ -1,5 +1,7 @@
 # AI Governance in Action
 
+**🚀 [Try this app here](https://ai-governance.streamlit.app/)** — live demo, bring your own API keys (BYOK), nothing to install.
+
 This project is a **working demo**, not a slide deck. It shows what "AI governance" actually looks like once you write it in code.
 
 Background reading: [`ai-governance-transcript.md`](ai-governance-transcript.md) — the conversation this whole project came from.
