@@ -30,8 +30,8 @@ __pycache__/
 # A fresh clone (or the deployed app) isn't stuck without data either way —
 # app.py detects missing files and offers "use bundled sample data" or a
 # named upload per file (see docs/01-data-access.md).
-data/*.xlsx
-data/*.csv
+# data/*.xlsx
+# data/*.csv
 
 # Streamlit agent skills (environment-specific symlinks, auto-installed
 # locally by a Claude Code skill — not project source)
