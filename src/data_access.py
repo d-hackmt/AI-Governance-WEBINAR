@@ -376,8 +376,15 @@ def build_company_knowledge_index(jina_api_key: str):
     if not jina_api_key:
         raise ValueError("No Jina API key provided. Enter it in the sidebar first.")
 
+    import faiss
     from langchain_community.vectorstores import FAISS
     from langchain_core.documents import Document
+
+    # Belt-and-braces alongside the OMP_NUM_THREADS env var set at app
+    # startup (app.py) — faiss-cpu segfaults in some constrained cloud
+    # containers when its OpenMP thread pool doesn't respect env vars alone.
+    # Harmless here: this index is 2 documents, single-threaded is instant.
+    faiss.omp_set_num_threads(1)
 
     documents = [
         Document(

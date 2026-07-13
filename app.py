@@ -13,6 +13,19 @@ tab only. Nothing is read from or written to .env or disk.
 
 from __future__ import annotations
 
+import os
+
+# Must be set before numpy/faiss ever get imported anywhere in this process
+# (they read these at native-library init time, not lazily) — faiss-cpu is a
+# well-documented source of segfaults in constrained cloud containers when
+# its OpenMP thread pool conflicts with the container's CPU/thread limits.
+# This app's FAISS index is 2 documents; single-threaded costs nothing.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("VECLIB_MAXIMUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+
 import json
 import sys
 from pathlib import Path
@@ -193,6 +206,25 @@ if not pii_authorized:
         "(POL-005) looks like in the governance panel below."
     )
 
+def _run_graph_safely(compiled, graph_input, config, spinner_text: str):
+    """Runs compiled.invoke(...), returning (result, None) on success or
+    (None, exception) on failure — so a caller can show a clean error
+    instead of leaving st.session_state["pipeline"] half-updated after an
+    unhandled exception (which is what made earlier crashes look like "the
+    app just stopped working" rather than a readable error)."""
+    try:
+        with st.spinner(spinner_text):
+            return compiled.invoke(graph_input, config=config), None
+    except Exception as exc:  # noqa: BLE001 — surfaced to the UI, not swallowed
+        return None, exc
+
+
+def _show_run_error(exc: Exception) -> None:
+    st.error(f"The pipeline hit an error and stopped: {exc}")
+    with st.expander("Full error details"):
+        st.exception(exc)
+
+
 run_clicked = st.button("▶️ Run governance-monitored review", type="primary")
 
 if run_clicked:
@@ -246,18 +278,26 @@ if run_clicked:
         compiled = build_graph(session, retriever, llms, pii_authorization_claim)
         config = {"configurable": {"thread_id": session.session_id}}
 
-        with st.spinner("Running Analyst -> Decision (pausing for your approval next)..."):
-            result = compiled.invoke({"application_id": application_id}, config=config)
-
-        st.session_state["pipeline"] = {
-            "session": session,
-            "compiled": compiled,
-            "config": config,
-            "application_id": application_id,
-            "stage": "awaiting_approval",
-            "interrupt_payload": result["__interrupt__"][0].value,
-        }
-        st.rerun()
+        result, error = _run_graph_safely(
+            compiled,
+            {"application_id": application_id},
+            config,
+            "Running Analyst -> Decision (pausing for your approval next)...",
+        )
+        if error is not None:
+            _show_run_error(error)
+            if not session.is_closed:
+                session.close()
+        else:
+            st.session_state["pipeline"] = {
+                "session": session,
+                "compiled": compiled,
+                "config": config,
+                "application_id": application_id,
+                "stage": "awaiting_approval",
+                "interrupt_payload": result["__interrupt__"][0].value,
+            }
+            st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +336,7 @@ def _render_governance_panel(session) -> None:
             }
             for e in session.events
         ]
-        st.dataframe(rows, use_container_width=True)
+        st.dataframe(rows, width="stretch")
         st.download_button(
             "Download full trace (JSON)",
             data=json.dumps(session.events, indent=2),
@@ -343,23 +383,31 @@ if pipeline and pipeline["application_id"] == application_id:
         feedback = st.text_area("Reviewer notes (optional)")
         c1, c2 = st.columns(2)
         if c1.button("✅ Approve", type="primary"):
-            with st.spinner("Running Auditor Agent..."):
-                final_state = pipeline["compiled"].invoke(
-                    Command(resume={"approved": True, "feedback": feedback}),
-                    config=pipeline["config"],
-                )
-            pipeline["stage"] = "done"
-            pipeline["final_state"] = final_state
-            st.rerun()
+            final_state, error = _run_graph_safely(
+                pipeline["compiled"],
+                Command(resume={"approved": True, "feedback": feedback}),
+                pipeline["config"],
+                "Running Auditor Agent...",
+            )
+            if error is not None:
+                _show_run_error(error)
+            else:
+                pipeline["stage"] = "done"
+                pipeline["final_state"] = final_state
+                st.rerun()
         if c2.button("❌ Deny / override"):
-            with st.spinner("Running Auditor Agent..."):
-                final_state = pipeline["compiled"].invoke(
-                    Command(resume={"approved": False, "feedback": feedback}),
-                    config=pipeline["config"],
-                )
-            pipeline["stage"] = "done"
-            pipeline["final_state"] = final_state
-            st.rerun()
+            final_state, error = _run_graph_safely(
+                pipeline["compiled"],
+                Command(resume={"approved": False, "feedback": feedback}),
+                pipeline["config"],
+                "Running Auditor Agent...",
+            )
+            if error is not None:
+                _show_run_error(error)
+            else:
+                pipeline["stage"] = "done"
+                pipeline["final_state"] = final_state
+                st.rerun()
 
     elif pipeline["stage"] == "done":
         final_state = pipeline["final_state"]

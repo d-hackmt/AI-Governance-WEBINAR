@@ -80,7 +80,19 @@ class GovernanceSession:
 
     def __init__(self) -> None:
         self.session_id = str(uuid.uuid4())
-        self.agent_id = AGENT_ID
+        # Unique per run, not the shared constant AGENT_ID — SessionManager
+        # tracks "one active session per agent_id" and force-closes the
+        # prior one on a collision (by design, for a real long-running
+        # agent process). On a deployed app, one Python process can be
+        # serving multiple browser sessions/users concurrently, all
+        # importing this same module and its module-level _SESSION_MANAGER.
+        # A fixed agent_id meant every concurrent run collided with
+        # whichever other run started most recently, force-closing
+        # sessions still mid-flight waiting on a human's Approve/Deny click
+        # (visible in logs as "SESSION_FORCE_CLOSED"). Suffixing with this
+        # run's own session_id makes every run's agent_id unique, so two
+        # concurrent runs can never collide.
+        self.agent_id = f"{AGENT_ID}-{self.session_id}"
         self._sink = InMemorySink()
         self._sink_writer = SinkWriter(self._sink)
         self.profile = (
