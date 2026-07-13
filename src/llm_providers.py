@@ -27,10 +27,15 @@ FALLBACK_MISTRAL_MODEL = "mistral-large-latest"
 # classifier models (prompt-guard, which "answers" chat completions with a
 # bare confidence score instead of an actual response), Groq's own agentic
 # router models (compound/compound-mini — reject tool calling outright with
-# a 400), and allam-2-7b (an Arabic-focused chat model that also rejects
-# tool calling with the same 400) — alongside real, tool-calling-capable
-# chat models every agent in this demo needs. Filter all of those out.
-_GROQ_NON_CHAT_MARKERS = ("whisper", "orpheus", "canopylabs", "prompt-guard", "compound", "allam")
+# a 400), allam-2-7b (an Arabic-focused chat model that also rejects tool
+# calling with the same 400), and gpt-oss-safeguard (a safety-classifier
+# variant, not a general reasoning model — none of this app's agents need
+# it). Every remaining model has been individually tested against Groq's
+# real API and confirmed to support tool calling, which every agent here
+# requires.
+_GROQ_NON_CHAT_MARKERS = (
+    "whisper", "orpheus", "canopylabs", "prompt-guard", "compound", "allam", "safeguard",
+)
 
 
 def fetch_groq_models(api_key: str) -> list[str]:
@@ -61,13 +66,24 @@ def fetch_groq_models(api_key: str) -> list[str]:
 # Mistral's /v1/models list mixes chat models in with embedding, OCR,
 # moderation, speech models, and access-restricted "labs" models
 # (labs-leanstral-* — 403s for accounts without that entitlement) — none of
-# which accept a normal chat/completions request. Filter those out so the
-# dropdown can't offer a model that will fail the moment an agent uses it.
+# which accept a normal chat/completions request.
 _MISTRAL_NON_CHAT_MARKERS = ("embed", "ocr", "moderation", "transcribe", "voxtral", "tts", "labs-leanstral")
+
+# Beyond that, Mistral's list is heavily redundant for this app's purposes:
+# every general-reasoning family (mistral-large, mistral-medium, ministral,
+# magistral, ...) is listed both as a "-latest" alias AND as several
+# individually-dated snapshots (mistral-medium-2505, -2508, -2604, -3, ...)
+# — all pointing at essentially the same model family. None of that history
+# is useful in a model-picker dropdown, so only "-latest" (or a bare id with
+# no "-latest" sibling, like open-mistral-nemo) is kept. Code/CLI-agent
+# specific families (codestral, devstral, mistral-code-*, mistral-vibe-cli-*)
+# are dropped too — none of this app's agents need code-generation or
+# CLI-tool-use specialization, just general reasoning + tool calling.
+_MISTRAL_SPECIALIZED_MARKERS = ("codestral", "devstral", "mistral-code", "vibe-cli")
 
 
 def fetch_mistral_models(api_key: str) -> list[str]:
-    """Return live chat-capable model IDs from Mistral."""
+    """Return live, general-purpose, tool-calling-capable model IDs from Mistral."""
     if not api_key:
         return [FALLBACK_MISTRAL_MODEL]
     try:
@@ -84,6 +100,8 @@ def fetch_mistral_models(api_key: str) -> list[str]:
                 for m in data
                 if isinstance(m, dict)
                 and not any(marker in m["id"].lower() for marker in _MISTRAL_NON_CHAT_MARKERS)
+                and not any(marker in m["id"].lower() for marker in _MISTRAL_SPECIALIZED_MARKERS)
+                and (m["id"].endswith("-latest") or m["id"] == "open-mistral-nemo")
             }
         )
         return ids or [FALLBACK_MISTRAL_MODEL]
