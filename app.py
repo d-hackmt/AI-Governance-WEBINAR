@@ -143,6 +143,18 @@ data_section_label = (
     else "📁 Company data files (loaded — expand to replace any of them)"
 )
 
+def _friendly_file_error(exc: Exception, filename: str) -> str:
+    """PermissionError on Windows almost always means the file is open
+    elsewhere (Excel keeps a lock file like '~$name.xlsx' while it's open) —
+    give that concrete, actionable hint instead of a raw traceback."""
+    if isinstance(exc, PermissionError):
+        return (
+            f"Couldn't write {filename} — it looks like it's open in Excel "
+            "or another program right now. Close it there and try again."
+        )
+    return f"Couldn't write {filename}: {exc}"
+
+
 with st.expander(data_section_label, expanded=bool(missing_files)):
     if missing_files:
         st.warning(
@@ -151,10 +163,14 @@ with st.expander(data_section_label, expanded=bool(missing_files)):
         )
 
     if st.button("🧪 Use bundled sample data (resets all 4 files)"):
-        generate_dummy_data.main()
-        _cached_applicant_ids.clear()
-        _cached_applicant_preview.clear()
-        st.rerun()
+        try:
+            generate_dummy_data.main()
+        except Exception as exc:  # noqa: BLE001 — surfaced to the UI, not swallowed
+            st.error(_friendly_file_error(exc, "one of the sample data files"))
+        else:
+            _cached_applicant_ids.clear()
+            _cached_applicant_preview.clear()
+            st.rerun()
 
     st.divider()
     st.caption("Or upload your own — each field expects exactly this filename's data:")
@@ -168,15 +184,22 @@ with st.expander(data_section_label, expanded=bool(missing_files)):
             uploaded_by_filename[spec["filename"]] = uploaded
 
     if uploaded_by_filename and st.button("💾 Save uploaded file(s)"):
+        any_failed = False
         for filename, uploaded_file in uploaded_by_filename.items():
-            warning = data_access.save_uploaded_file(filename, uploaded_file.getvalue())
-            if warning:
-                st.warning(f"{filename}: {warning}")
+            try:
+                warning = data_access.save_uploaded_file(filename, uploaded_file.getvalue())
+            except Exception as exc:  # noqa: BLE001 — surfaced to the UI, not swallowed
+                st.error(_friendly_file_error(exc, filename))
+                any_failed = True
             else:
-                st.success(f"{filename}: saved.")
+                if warning:
+                    st.warning(f"{filename}: {warning}")
+                else:
+                    st.success(f"{filename}: saved.")
         _cached_applicant_ids.clear()
         _cached_applicant_preview.clear()
-        st.rerun()
+        if not any_failed:
+            st.rerun()
 
 if missing_files:
     st.stop()

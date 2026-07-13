@@ -33,6 +33,11 @@ __pycache__/
 data/*.xlsx
 data/*.csv
 
+# Streamlit agent skills (environment-specific symlinks, auto-installed
+# locally by a Claude Code skill — not project source)
+.agents/skills/developing-with-streamlit
+.claude/skills/developing-with-streamlit
+
 # OS / editor junk
 .DS_Store
 Thumbs.db
