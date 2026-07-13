@@ -1,5 +1,0 @@
-rule_id,description,threshold
-CR-1,Minimum acceptable credit score,620
-CR-2,Maximum debt-to-income ratio (%),40
-CR-3,Maximum loan amount without senior review (USD),25000
-CR-4,Minimum monthly income (USD),2200

@@ -27,8 +27,11 @@ __pycache__/
 # Generated demo data — regenerate any time with:
 #   python scripts/generate_dummy_data.py
 # Ignored so a session's audit-log writes never show up as noisy diffs.
-# data/*.xlsx
-# data/*.csv
+# A fresh clone (or the deployed app) isn't stuck without data either way —
+# app.py detects missing files and offers "use bundled sample data" or a
+# named upload per file (see docs/01-data-access.md).
+data/*.xlsx
+data/*.csv
 
 # OS / editor junk
 .DS_Store
