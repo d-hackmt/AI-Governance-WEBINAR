@@ -40,7 +40,13 @@ import generate_dummy_data  # noqa: E402
 from graph import build_graph  # noqa: E402
 from governance_wiring import GovernanceSession  # noqa: E402
 from langgraph.types import Command  # noqa: E402
-from llm_providers import build_chat_model, fetch_groq_models, fetch_mistral_models  # noqa: E402
+from llm_providers import (  # noqa: E402
+    FALLBACK_GROQ_MODEL,
+    FALLBACK_MISTRAL_MODEL,
+    build_chat_model,
+    fetch_groq_models,
+    fetch_mistral_models,
+)
 
 GOVERNANCE_DIR = Path(__file__).resolve().parent / "governance"
 
@@ -81,12 +87,20 @@ def _model_picker(role_label: str, default_provider: str, groq_key: str, mistral
         key=f"provider_{role_label}",
     )
     key = groq_key if provider == "groq" else mistral_key
+    fallback_model = FALLBACK_GROQ_MODEL if provider == "groq" else FALLBACK_MISTRAL_MODEL
     models = (
         (_cached_groq_models(key) if provider == "groq" else _cached_mistral_models(key))
         if key
         else ["(enter API key first)"]
     )
-    model = col2.selectbox(f"{role_label} model", models, key=f"model_{role_label}")
+    # Default to a known-good, tool-calling-verified model rather than
+    # whichever one happens to sort first alphabetically — that's exactly
+    # how a model with no tool-calling support (e.g. Groq's allam-2-7b)
+    # became a silent default the moment a key was entered, breaking every
+    # agent (all of them need tool calling) without the user ever having
+    # picked it themselves.
+    default_index = models.index(fallback_model) if fallback_model in models else 0
+    model = col2.selectbox(f"{role_label} model", models, index=default_index, key=f"model_{role_label}")
     return provider, model
 
 
@@ -243,7 +257,18 @@ def _run_graph_safely(compiled, graph_input, config, spinner_text: str):
 
 
 def _show_run_error(exc: Exception) -> None:
-    st.error(f"The pipeline hit an error and stopped: {exc}")
+    message = str(exc)
+    if "tool calling" in message.lower() or "tool_calling" in message.lower():
+        st.error(
+            "One of the agents' selected models doesn't support tool calling "
+            "(every agent here needs it, to read files / call tools). "
+            "Pick a different model in the sidebar for the Analyst, Decision, "
+            "and Auditor and try again — known-good picks: "
+            "`llama-3.3-70b-versatile` or `llama-3.1-8b-instant` on Groq, "
+            "`mistral-large-latest` or `mistral-small-latest` on Mistral."
+        )
+    else:
+        st.error(f"The pipeline hit an error and stopped: {exc}")
     with st.expander("Full error details"):
         st.exception(exc)
 

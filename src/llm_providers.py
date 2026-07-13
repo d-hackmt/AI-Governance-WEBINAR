@@ -25,11 +25,12 @@ FALLBACK_MISTRAL_MODEL = "mistral-large-latest"
 # Groq's /models list also mixes in speech (whisper), text-to-speech
 # (orpheus/canopylabs — additionally requires separate terms acceptance),
 # classifier models (prompt-guard, which "answers" chat completions with a
-# bare confidence score instead of an actual response), and Groq's own
-# agentic router models (compound/compound-mini — these reject tool
-# calling outright with a 400, which every agent in this demo needs) —
-# alongside real, tool-calling-capable chat models. Filter all of those out.
-_GROQ_NON_CHAT_MARKERS = ("whisper", "orpheus", "canopylabs", "prompt-guard", "compound")
+# bare confidence score instead of an actual response), Groq's own agentic
+# router models (compound/compound-mini — reject tool calling outright with
+# a 400), and allam-2-7b (an Arabic-focused chat model that also rejects
+# tool calling with the same 400) — alongside real, tool-calling-capable
+# chat models every agent in this demo needs. Filter all of those out.
+_GROQ_NON_CHAT_MARKERS = ("whisper", "orpheus", "canopylabs", "prompt-guard", "compound", "allam")
 
 
 def fetch_groq_models(api_key: str) -> list[str]:
@@ -58,10 +59,11 @@ def fetch_groq_models(api_key: str) -> list[str]:
 
 
 # Mistral's /v1/models list mixes chat models in with embedding, OCR,
-# moderation, and speech models — none of which accept chat/completions
-# requests. Filter those out so the dropdown can't offer a model that will
-# 400 the moment an agent tries to use it.
-_MISTRAL_NON_CHAT_MARKERS = ("embed", "ocr", "moderation", "transcribe", "voxtral", "tts")
+# moderation, speech models, and access-restricted "labs" models
+# (labs-leanstral-* — 403s for accounts without that entitlement) — none of
+# which accept a normal chat/completions request. Filter those out so the
+# dropdown can't offer a model that will fail the moment an agent uses it.
+_MISTRAL_NON_CHAT_MARKERS = ("embed", "ocr", "moderation", "transcribe", "voxtral", "tts", "labs-leanstral")
 
 
 def fetch_mistral_models(api_key: str) -> list[str]:
